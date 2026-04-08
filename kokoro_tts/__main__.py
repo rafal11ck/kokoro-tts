@@ -54,9 +54,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-o", "--output", help="Write WAV to PATH instead of playing.")
     args = p.parse_args(argv)
 
-    # If the Kokoro-82M weights are already cached, skip HF's etag check.
+    # If the model config and the requested voice file are already cached,
+    # skip HF's etag check. Checking the specific voice avoids triggering
+    # offline mode before the voice has ever been downloaded.
     hf_home = Path(os.environ.get("HF_HOME") or (Path.home() / ".cache" / "huggingface"))
-    if (hf_home / "hub" / "models--hexgrad--Kokoro-82M").is_dir():
+    snapshots = hf_home / "hub" / "models--hexgrad--Kokoro-82M" / "snapshots"
+    if snapshots.is_dir() and any(
+        (s / "config.json").exists() and (s / "voices" / f"{args.voice}.pt").exists()
+        for s in snapshots.iterdir()
+    ):
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
     # Silence two known-upstream warnings from hexgrad/kokoro's istftnet model:
