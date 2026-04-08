@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kokoro-tts"
+version = "0.1.0"
+description = "espeak-like CLI wrapper around Kokoro TTS"
+requires-python = ">=3.10"
+dependencies = [
+    "kokoro-onnx",
+    "soundfile",
+    "numpy",
+]
+
+[project.scripts]
+kokoro-tts = "kokoro_tts.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["kokoro_tts*"]
