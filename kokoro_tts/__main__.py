@@ -8,6 +8,18 @@ import sys
 import tempfile
 from pathlib import Path
 
+LANG_CODES = {
+    "en-us": "a",
+    "en-gb": "b",
+    "es":    "e",
+    "fr":    "f",
+    "hi":    "h",
+    "it":    "i",
+    "ja":    "j",
+    "pt-br": "p",
+    "zh":    "z",
+}
+
 
 def play(wav_path: Path) -> int:
     for player in (["aplay", "-q", str(wav_path)], ["paplay", str(wav_path)]):
@@ -36,8 +48,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-f", "--file", help="Read text from FILE instead of args.")
     p.add_argument("-v", "--voice", default="af_heart", help="Voice name (default: af_heart).")
     p.add_argument("-s", "--speed", type=float, default=1.0, help="Speech speed multiplier (default: 1.0).")
-    p.add_argument("-l", "--lang", default="a",
-                   help="Language code: a=en-us, b=en-gb, e=es, f=fr, h=hi, i=it, j=ja, p=pt-br, z=zh (default: a).")
+    p.add_argument("-l", "--lang", default="en-us", choices=sorted(LANG_CODES),
+                   help="Language tag (default: en-us).")
     p.add_argument("-o", "--output", help="Write WAV to PATH instead of playing.")
     args = p.parse_args(argv)
 
@@ -50,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     if not text.strip():
         p.error("no text provided (pass as args, via -f FILE, or on stdin)")
 
-    pipeline = KPipeline(lang_code=args.lang)
+    pipeline = KPipeline(lang_code=LANG_CODES[args.lang])
     chunks = [audio for _, _, audio in pipeline(text, voice=args.voice, speed=args.speed)]
     if not chunks:
         print("kokoro-tts: no audio produced", file=sys.stderr)
