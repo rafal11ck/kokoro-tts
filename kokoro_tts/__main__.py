@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-o", "--output", help="Write WAV to PATH instead of playing.")
     args = p.parse_args(argv)
 
+    # If the Kokoro-82M weights are already cached, skip HF's etag check.
+    hf_home = Path(os.environ.get("HF_HOME") or (Path.home() / ".cache" / "huggingface"))
+    if (hf_home / "hub" / "models--hexgrad--Kokoro-82M").is_dir():
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+    # Silence two known-upstream warnings from hexgrad/kokoro's istftnet model:
+    #   - LSTM(dropout=0.2, num_layers=1) — no-op dropout, upstream bug
+    #   - torch.nn.utils.weight_norm deprecated in favor of parametrizations.weight_norm
+    # Revisit when https://github.com/hexgrad/kokoro is updated.
+    import warnings
+    warnings.filterwarnings("ignore", message=r"dropout option adds dropout.*")
+    warnings.filterwarnings("ignore", message=r"`torch\.nn\.utils\.weight_norm` is deprecated.*")
+
     # Import lazily so --help is fast.
     from kokoro import KPipeline  # type: ignore
     import numpy as np  # type: ignore
@@ -62,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     if not text.strip():
         p.error("no text provided (pass as args, via -f FILE, or on stdin)")
 
-    pipeline = KPipeline(lang_code=LANG_CODES[args.lang])
+    pipeline = KPipeline(lang_code=LANG_CODES[args.lang], repo_id="hexgrad/Kokoro-82M")
     chunks = [audio for _, _, audio in pipeline(text, voice=args.voice, speed=args.speed)]
     if not chunks:
         print("kokoro-tts: no audio produced", file=sys.stderr)
