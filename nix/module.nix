@@ -18,7 +18,7 @@ in {
       environment.systemPackages = [ pkg ];
     })
     (lib.mkIf cfg.renpyTts {
-      environment.sessionVariables.RENPY_TTS_COMMAND = "${pkg}/bin/kokoro-tts -";
+      environment.sessionVariables.RENPY_TTS_COMMAND = "${pkg}/bin/kokoro-tts";
     })
   ];
 }
