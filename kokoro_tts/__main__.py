@@ -284,6 +284,8 @@ def _handle_client(conn: socket.socket, state: _DaemonState) -> None:
                 except OSError:
                     pass
                 return
+            text = payload.get("text", "") if isinstance(payload, dict) else ""
+            print(f"kokoro-tts: speak {text!r}", flush=True)
             with state.utterance_lock:
                 _do_speak(state, conn, payload)
         elif cmd == b"STOP":
