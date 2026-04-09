@@ -1,7 +1,7 @@
 self: { config, lib, pkgs, ... }:
 let
   cfg = config.programs.kokoro-tts;
-  pkg = self.packages.${pkgs.system}.default;
+  pkg = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in {
   options.programs.kokoro-tts = {
     enable = lib.mkEnableOption "kokoro-tts CLI";
