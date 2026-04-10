@@ -178,9 +178,11 @@ class _DaemonState:
 
     def ensure_pipeline(self) -> None:
         if self.pipeline is None:
+            print(f"kokoro-tts: loading model ({self.lang})", flush=True)
             from kokoro import KPipeline  # type: ignore
             self.pipeline = KPipeline(
                 lang_code=LANG_CODES[self.lang], repo_id="hexgrad/Kokoro-82M")
+            print("kokoro-tts: model loaded", flush=True)
 
     def is_idle(self) -> bool:
         return self.current_player is None and not self.utterance_lock.locked()
@@ -214,26 +216,32 @@ def _do_speak(state: _DaemonState, conn: socket.socket, payload: dict) -> None:
     except OSError:
         pass
 
+    def _watch_stop() -> None:
+        try:
+            while not state.stop_event.is_set():
+                try:
+                    data = conn.recv(64)
+                except OSError:
+                    return
+                if not data:
+                    print("kokoro-tts: client disconnect", flush=True)
+                    state.stop_current()
+                    return
+                if b"STOP" in data:
+                    print("kokoro-tts: stop", flush=True)
+                    state.stop_current()
+                    return
+        except Exception:
+            pass
+    watcher = threading.Thread(target=_watch_stop, daemon=True)
+    watcher.start()
+
     stopped = False
     try:
         for _, _, audio in state.pipeline(text, voice=voice, speed=speed):
             if state.stop_event.is_set():
                 stopped = True
                 break
-            # Between-sentence check for STOP from the same client socket.
-            try:
-                r, _, _ = select.select([conn], [], [], 0)
-            except (OSError, ValueError):
-                stopped = True
-                break
-            if r:
-                try:
-                    data = conn.recv(64)
-                except OSError:
-                    data = b""
-                if not data or b"STOP" in data:
-                    stopped = True
-                    break
             arr = np.asarray(audio, dtype=np.float32)
             if gain != 1.0:
                 arr = arr * gain
@@ -253,10 +261,15 @@ def _do_speak(state: _DaemonState, conn: socket.socket, payload: dict) -> None:
                     player.stdin.close()
             except OSError:
                 pass
-            try:
-                player.wait()
-            except Exception:
-                pass
+            while player.poll() is None:
+                if state.stop_event.wait(0.05):
+                    stopped = True
+                    break
+            if stopped:
+                try:
+                    player.kill()
+                except ProcessLookupError:
+                    pass
         state.current_player = None
         state.last_activity = time.time()
 
@@ -289,6 +302,7 @@ def _handle_client(conn: socket.socket, state: _DaemonState) -> None:
             with state.utterance_lock:
                 _do_speak(state, conn, payload)
         elif cmd == b"STOP":
+            print("kokoro-tts: stop", flush=True)
             state.stop_current()
             try:
                 conn.sendall(b"STOPPED\n")
@@ -419,6 +433,7 @@ def client_speak(text: str, lang: str, voice: str, speed: float, amp: float) -> 
     s = _connect_with_spawn(lang)
 
     def _on_signal(_sig: int, _frm: object) -> None:
+        print(f"kokoro-tts: client got signal {_sig}, sending STOP", file=sys.stderr, flush=True)
         try:
             s.sendall(b"STOP\n")
         except OSError:
